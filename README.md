@@ -67,10 +67,9 @@ These results show that the model has strong object detection performance despit
 ## 📂 Project Structure
 
 drowsiness-detection/
-│
 ├── alarm-restricted-access-355278.mp3
 ├── app.py
 ├── best.pt
 ├── requirements.txt
-├── training_model_notebook.ipynb 
-└── README.md 
+├── training_model_notebook.ipynb
+└── README.md
