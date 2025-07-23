@@ -1,0 +1,9 @@
+streamlit
+torch
+Pillow
+numpy
+opencv-python-headless
+matplotlib
+PyYAML
+git+https://github.com/ultralytics/yolov5.git
+pipreqs
