@@ -68,9 +68,9 @@ These results show that the model has strong object detection performance despit
 
 drowsiness-detection/
 │
-├── alarm/ # Alarm sound files
-├── app.py # Streamlit app for detection and alarm
-├── best.pt # Trained YOLOv5 model weights
-├── requirements.txt # Python dependencies
-├── train_model.ipynb # Notebook/script for training the model
-└── README.md # Project documentation
+├── alarm-restricted-access-355278.mp3
+├── app.py
+├── best.pt
+├── requirements.txt
+├── training_model_notebook.ipynb 
+└── README.md 
