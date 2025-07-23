@@ -28,16 +28,16 @@ The detection system is deployed using **Streamlit** on a local device. To make 
 
 ## 🧪 Model Evaluation Results
 
-After training for 5 epochs using 100 annotated images, the model produced the following evaluation metrics:
+After training the model for 5 epochs using 100 annotated images, the model produced the following evaluation metrics:
 
 | Metric         | Value  | Explanation |
 |----------------|--------|-------------|
-| **Precision (P)**     | 0.818  | 81.8% of the model’s positive predictions are correct |
-| **Recall (R)**        | 0.962  | 96.2% of actual drowsy/awake instances were correctly detected |
-| **mAP@0.5**           | 0.81   | Main accuracy metric: 81% detection precision at IoU threshold 0.5 |
-| **mAP@0.5:0.95**      | 0.399  | Average performance across stricter IoU thresholds (50–95%) |
+| **Precision (P)**     | 0.826  | 82.6% of the model’s positive predictions are correct |
+| **Recall (R)**        | 0.875  | 87.5% of actual drowsy/awake instances were correctly detected |
+| **mAP@0.5**           | 0.861  | **Main accuracy metric**: 86.1% detection precision at IoU threshold 0.5 |
+| **mAP@0.5:0.95**      | 0.473  | Average performance across stricter IoU thresholds (50–95%) |
 
-These results show that the model has strong detection performance despite using a relatively small dataset. Further improvement is possible by increasing the amount of training data and epochs.
+These results show that the model has strong object detection performance despite using a relatively small dataset. Further improvements can be made by expanding the dataset, adding augmentations, and training for more epochs.
 
 ---
 
@@ -55,7 +55,7 @@ These results show that the model has strong detection performance despite using
 ## 🚀 How It Works
 
 1. The model is trained using YOLOv5 with annotated data.
-2. A Streamlit app runs the model for real-time video detection.
+2. A Streamlit app (`app.py`) runs the model for real-time video detection.
 3. The app is exposed to the internet using LocalXpose.
 4. The driver accesses the detection interface through a link using a device with a camera and speaker.
 5. When the driver is detected as drowsy:
@@ -66,3 +66,11 @@ These results show that the model has strong detection performance despite using
 
 ## 📂 Project Structure
 
+drowsiness-detection/
+│
+├── alarm/ # Alarm sound files
+├── app.py # Streamlit app for detection and alarm
+├── best.pt # Trained YOLOv5 model weights
+├── requirements.txt # Python dependencies
+├── train_model.ipynb # Notebook/script for training the model
+└── README.md # Project documentation
