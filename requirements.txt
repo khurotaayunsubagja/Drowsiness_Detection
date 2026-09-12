@@ -1,9 +1,7 @@
 streamlit
-torch
-Pillow
-numpy
+ultralytics
+streamlit-webrtc
 opencv-python-headless
-matplotlib
-PyYAML
-git+https://github.com/ultralytics/yolov5.git
-pipreqs
+av
+numpy
+torch
