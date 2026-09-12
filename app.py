@@ -4,9 +4,9 @@ from pathlib import Path
 
 import av
 import cv2
+import torch
 import streamlit as st
 
-from ultralytics import YOLO
 from streamlit_webrtc import (
     webrtc_streamer,
     VideoProcessorBase,
