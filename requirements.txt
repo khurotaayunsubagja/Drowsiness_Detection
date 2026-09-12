@@ -13,3 +13,7 @@ scipy
 tqdm
 matplotlib
 seaborn
+ipython
+gitpython
+psutil
+thop
