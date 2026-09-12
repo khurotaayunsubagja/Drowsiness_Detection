@@ -22,7 +22,7 @@ from streamlit_webrtc import (
 st.set_page_config(
     page_title="Drowsiness Detection",
     page_icon="😴",
-    layout="wide"
+    layout="wide",
 )
 
 
@@ -35,32 +35,105 @@ BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "best.pt"
 
 ALARM_PATH = (
-    BASE_DIR /
-    "alarm-restricted-access-355278.mp3"
+    BASE_DIR
+    / "alarm-restricted-access-355278.mp3"
 )
 
 
 # ============================================================
-# LOAD MODEL
+# CHECK FILE
 # ============================================================
-
-@st.cache_resource
-def load_model():
-    return YOLO(str(MODEL_PATH))
-
 
 if not MODEL_PATH.exists():
     st.error(
-        "Model best.pt tidak ditemukan."
+        "❌ File model `best.pt` tidak ditemukan."
     )
     st.stop()
 
 
-model = load_model()
+# ============================================================
+# LOAD YOLOv5 MODEL
+# ============================================================
+
+@st.cache_resource
+def load_model():
+
+    # Menggunakan YOLOv5 v7.0 karena best.pt
+    # berasal dari YOLOv5
+    model = torch.hub.load(
+        "ultralytics/yolov5:v7.0",
+        "custom",
+        path=str(MODEL_PATH),
+        force_reload=False,
+        trust_repo=True,
+        device="cpu",
+    )
+
+    model.eval()
+
+    return model
+
+
+try:
+    model = load_model()
+
+except Exception as e:
+
+    st.error(
+        "❌ Model YOLOv5 gagal dimuat."
+    )
+
+    st.exception(e)
+
+    st.stop()
 
 
 # ============================================================
-# HELPER
+# MODEL CLASS HELPER
+# ============================================================
+
+def get_model_classes():
+
+    names = model.names
+
+    if isinstance(names, dict):
+
+        return [
+            str(names[key])
+            for key in sorted(names.keys())
+        ]
+
+    return [
+        str(name)
+        for name in names
+    ]
+
+
+def get_class_name(class_id):
+
+    names = model.names
+
+    class_id = int(class_id)
+
+    if isinstance(names, dict):
+
+        return str(
+            names.get(
+                class_id,
+                class_id
+            )
+        )
+
+    return str(
+        names[class_id]
+    )
+
+
+CLASS_NAMES = get_model_classes()
+
+
+# ============================================================
+# AUTO FIND DROWSY CLASS
 # ============================================================
 
 DROWSY_KEYWORDS = [
@@ -70,105 +143,106 @@ DROWSY_KEYWORDS = [
     "closed",
     "close",
     "ngantuk",
+    "tired",
 ]
 
 
-def get_class_name(names, class_id):
+def find_default_drowsy_class():
 
-    if isinstance(names, dict):
-        return str(
-            names.get(class_id, class_id)
-        )
-
-    return str(names[class_id])
-
-
-def is_drowsy_label(label):
-
-    label = str(label).lower()
-
-    return any(
-        keyword in label
-        for keyword in DROWSY_KEYWORDS
-    )
-
-
-def detect_drowsiness(result):
-    """
-    Mendukung YOLO Detection maupun
-    YOLO Classification.
-    """
-
-    best_label = "Normal"
-    best_confidence = 0.0
-    drowsy = False
-
-    names = result.names
-
-    # ========================================================
-    # OBJECT DETECTION
-    # ========================================================
-
-    if (
-        result.boxes is not None
-        and len(result.boxes) > 0
+    for index, class_name in enumerate(
+        CLASS_NAMES
     ):
 
-        for box in result.boxes:
-
-            class_id = int(
-                box.cls[0].item()
-            )
-
-            confidence = float(
-                box.conf[0].item()
-            )
-
-            label = get_class_name(
-                names,
-                class_id
-            )
-
-            # Simpan detection confidence tertinggi
-            if confidence > best_confidence:
-
-                best_confidence = confidence
-                best_label = label
-
-            # Cek apakah ada kelas ngantuk
-            if is_drowsy_label(label):
-                drowsy = True
-
-    # ========================================================
-    # IMAGE CLASSIFICATION
-    # ========================================================
-
-    elif result.probs is not None:
-
-        class_id = int(
-            result.probs.top1
+        lower_name = (
+            class_name
+            .lower()
+            .strip()
         )
 
-        confidence = float(
-            result.probs.top1conf.item()
-        )
+        for keyword in DROWSY_KEYWORDS:
 
-        label = get_class_name(
-            names,
-            class_id
-        )
+            if keyword in lower_name:
 
-        best_label = label
-        best_confidence = confidence
+                return index
 
-        if is_drowsy_label(label):
-            drowsy = True
+    return 0
 
-    return (
-        drowsy,
-        best_label,
-        best_confidence
+
+DEFAULT_DROWSY_INDEX = (
+    find_default_drowsy_class()
+)
+
+
+# ============================================================
+# HEADER
+# ============================================================
+
+st.title(
+    "😴 Drowsiness Detection System"
+)
+
+st.caption(
+    "Real-time drowsiness detection using "
+    "YOLOv5 and webcam."
+)
+
+
+# ============================================================
+# SIDEBAR SETTINGS
+# ============================================================
+
+with st.sidebar:
+
+    st.header(
+        "⚙️ Detection Settings"
     )
+
+    confidence_threshold = st.slider(
+        "Confidence Threshold",
+        min_value=0.10,
+        max_value=0.95,
+        value=0.50,
+        step=0.05,
+    )
+
+    drowsy_duration = st.slider(
+        "Drowsiness Duration",
+        min_value=1.0,
+        max_value=10.0,
+        value=3.0,
+        step=0.5,
+        help=(
+            "Alarm akan aktif apabila kondisi "
+            "mengantuk terdeteksi selama durasi "
+            "ini."
+        ),
+    )
+
+    st.divider()
+
+    st.subheader(
+        "😴 Drowsy Class"
+    )
+
+    drowsy_class = st.selectbox(
+        "Pilih kelas yang menunjukkan kondisi mengantuk",
+        options=CLASS_NAMES,
+        index=DEFAULT_DROWSY_INDEX,
+    )
+
+    st.divider()
+
+    st.subheader(
+        "📦 Model Classes"
+    )
+
+    for i, name in enumerate(
+        CLASS_NAMES
+    ):
+
+        st.write(
+            f"{i}: {name}"
+        )
 
 
 # ============================================================
@@ -182,11 +256,16 @@ class DrowsinessProcessor(
     def __init__(
         self,
         confidence_threshold,
-        drowsy_duration
+        drowsy_class,
+        drowsy_duration,
     ):
 
         self.confidence_threshold = (
             confidence_threshold
+        )
+
+        self.drowsy_class = (
+            str(drowsy_class)
         )
 
         self.drowsy_duration = (
@@ -197,62 +276,225 @@ class DrowsinessProcessor(
 
         self.alert = False
 
-        self.label = "Normal"
-        self.confidence = 0.0
-        self.duration = 0.0
+        self.current_label = (
+            "No Detection"
+        )
+
+        self.current_confidence = 0.0
+
+        self.current_duration = 0.0
 
         self.lock = threading.Lock()
 
 
-    def recv(self, frame):
+    def recv(
+        self,
+        frame
+    ):
 
-        # Convert WebRTC frame ke OpenCV
+        # ====================================================
+        # GET CAMERA FRAME
+        # ====================================================
+
         image = frame.to_ndarray(
             format="bgr24"
         )
 
-        # ====================================================
-        # PREDICTION
-        # ====================================================
-
-        results = model.predict(
-            source=image,
-            conf=self.confidence_threshold,
-            verbose=False
+        # YOLO menerima RGB
+        rgb_image = cv2.cvtColor(
+            image,
+            cv2.COLOR_BGR2RGB
         )
 
-        result = results[0]
+
+        # ====================================================
+        # YOLOv5 PREDICTION
+        # ====================================================
+
+        with torch.no_grad():
+
+            results = model(
+                rgb_image,
+                size=640
+            )
+
+
+        # Format:
+        # x1, y1, x2, y2, confidence, class
+        detections = (
+            results
+            .xyxy[0]
+            .detach()
+            .cpu()
+            .numpy()
+        )
 
 
         # ====================================================
-        # CHECK RESULT
+        # INITIAL STATUS
         # ====================================================
 
-        (
-            drowsy,
-            label,
-            confidence
-        ) = detect_drowsiness(result)
+        is_drowsy = False
+
+        best_label = "No Detection"
+
+        best_confidence = 0.0
+
+
+        # ====================================================
+        # READ DETECTIONS
+        # ====================================================
+
+        for detection in detections:
+
+            x1 = int(
+                detection[0]
+            )
+
+            y1 = int(
+                detection[1]
+            )
+
+            x2 = int(
+                detection[2]
+            )
+
+            y2 = int(
+                detection[3]
+            )
+
+            confidence = float(
+                detection[4]
+            )
+
+            class_id = int(
+                detection[5]
+            )
+
+
+            # Skip confidence rendah
+            if (
+                confidence
+                < self.confidence_threshold
+            ):
+                continue
+
+
+            label = get_class_name(
+                class_id
+            )
+
+
+            # =================================================
+            # SAVE BEST DETECTION
+            # =================================================
+
+            if (
+                confidence
+                > best_confidence
+            ):
+
+                best_confidence = (
+                    confidence
+                )
+
+                best_label = label
+
+
+            # =================================================
+            # CHECK DROWSINESS
+            # =================================================
+
+            drowsy_detection = (
+                label.lower().strip()
+                ==
+                self.drowsy_class
+                .lower()
+                .strip()
+            )
+
+            if drowsy_detection:
+
+                is_drowsy = True
+
+                box_color = (
+                    0,
+                    0,
+                    255
+                )
+
+            else:
+
+                box_color = (
+                    0,
+                    255,
+                    0
+                )
+
+
+            # =================================================
+            # DRAW BOUNDING BOX
+            # =================================================
+
+            cv2.rectangle(
+                image,
+                (x1, y1),
+                (x2, y2),
+                box_color,
+                2,
+            )
+
+
+            label_text = (
+                f"{label} "
+                f"{confidence:.0%}"
+            )
+
+
+            cv2.putText(
+                image,
+                label_text,
+                (
+                    x1,
+                    max(
+                        y1 - 10,
+                        20
+                    ),
+                ),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                box_color,
+                2,
+                cv2.LINE_AA,
+            )
 
 
         # ====================================================
         # DROWSINESS TIMER
         # ====================================================
 
-        current_time = time.monotonic()
+        current_time = (
+            time.monotonic()
+        )
 
-        if drowsy:
 
-            if self.drowsy_start is None:
+        if is_drowsy:
+
+            if (
+                self.drowsy_start
+                is None
+            ):
 
                 self.drowsy_start = (
                     current_time
                 )
 
+
             duration = (
                 current_time
                 - self.drowsy_start
             )
+
 
             alert = (
                 duration
@@ -264,6 +506,7 @@ class DrowsinessProcessor(
             self.drowsy_start = None
 
             duration = 0.0
+
             alert = False
 
 
@@ -275,22 +518,21 @@ class DrowsinessProcessor(
 
             self.alert = alert
 
-            self.label = label
+            self.current_label = (
+                best_label
+            )
 
-            self.confidence = confidence
+            self.current_confidence = (
+                best_confidence
+            )
 
-            self.duration = duration
+            self.current_duration = (
+                duration
+            )
 
 
         # ====================================================
-        # DRAW YOLO RESULT
-        # ====================================================
-
-        annotated_frame = result.plot()
-
-
-        # ====================================================
-        # STATUS TEXT
+        # STATUS OVERLAY
         # ====================================================
 
         if alert:
@@ -299,38 +541,69 @@ class DrowsinessProcessor(
                 "WARNING: DROWSINESS DETECTED!"
             )
 
-            text_color = (0, 0, 255)
-
-        elif drowsy:
-
-            status_text = (
-                f"Drowsy: {duration:.1f}s"
+            status_color = (
+                0,
+                0,
+                255
             )
 
-            text_color = (0, 165, 255)
+        elif is_drowsy:
+
+            status_text = (
+                "Drowsiness detected: "
+                f"{duration:.1f}s"
+            )
+
+            status_color = (
+                0,
+                165,
+                255
+            )
 
         else:
 
-            status_text = "Status: Awake"
+            status_text = (
+                "Status: Awake"
+            )
 
-            text_color = (0, 255, 0)
+            status_color = (
+                0,
+                255,
+                0
+            )
 
 
-        cv2.putText(
-            annotated_frame,
-            status_text,
-            (20, 40),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            text_color,
-            2,
-            cv2.LINE_AA
+        # Background untuk text
+        cv2.rectangle(
+            image,
+            (10, 10),
+            (620, 60),
+            (0, 0, 0),
+            -1,
         )
 
 
-        return av.VideoFrame.from_ndarray(
-            annotated_frame,
-            format="bgr24"
+        cv2.putText(
+            image,
+            status_text,
+            (20, 45),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            status_color,
+            2,
+            cv2.LINE_AA,
+        )
+
+
+        # ====================================================
+        # RETURN FRAME
+        # ====================================================
+
+        return (
+            av.VideoFrame.from_ndarray(
+                image,
+                format="bgr24"
+            )
         )
 
 
@@ -339,90 +612,58 @@ class DrowsinessProcessor(
         with self.lock:
 
             return {
-                "alert": self.alert,
-                "label": self.label,
-                "confidence": self.confidence,
-                "duration": self.duration,
+                "alert":
+                    self.alert,
+
+                "label":
+                    self.current_label,
+
+                "confidence":
+                    self.current_confidence,
+
+                "duration":
+                    self.current_duration,
             }
 
 
 # ============================================================
-# HEADER
+# STATUS CARDS
 # ============================================================
 
-st.title(
-    "😴 Drowsiness Detection System"
+col1, col2, col3 = st.columns(
+    3
 )
-
-st.write(
-    """
-    Sistem ini menggunakan computer vision untuk
-    mendeteksi indikasi kantuk secara real-time
-    melalui webcam.
-    """
-)
-
-
-# ============================================================
-# SIDEBAR
-# ============================================================
-
-with st.sidebar:
-
-    st.header("⚙️ Detection Settings")
-
-    confidence_threshold = st.slider(
-        "Confidence Threshold",
-        min_value=0.10,
-        max_value=1.00,
-        value=0.50,
-        step=0.05
-    )
-
-    drowsy_duration = st.slider(
-        "Drowsiness Duration (seconds)",
-        min_value=1.0,
-        max_value=10.0,
-        value=3.0,
-        step=0.5
-    )
-
-    st.divider()
-
-    st.subheader(
-        "Model Classes"
-    )
-
-    st.write(model.names)
-
-
-# ============================================================
-# INFORMATION
-# ============================================================
-
-col1, col2, col3 = st.columns(3)
 
 with col1:
-    status_metric = st.empty()
+
+    status_placeholder = (
+        st.empty()
+    )
 
 with col2:
-    confidence_metric = st.empty()
+
+    confidence_placeholder = (
+        st.empty()
+    )
 
 with col3:
-    duration_metric = st.empty()
+
+    duration_placeholder = (
+        st.empty()
+    )
 
 
-status_metric.metric(
+status_placeholder.metric(
     "Status",
     "Waiting"
 )
 
-confidence_metric.metric(
+confidence_placeholder.metric(
     "Confidence",
     "-"
 )
 
-duration_metric.metric(
+duration_placeholder.metric(
     "Drowsy Duration",
     "0.0 s"
 )
@@ -432,16 +673,18 @@ duration_metric.metric(
 # WEBRTC CONFIG
 # ============================================================
 
-RTC_CONFIGURATION = RTCConfiguration(
-    {
-        "iceServers": [
-            {
-                "urls": [
-                    "stun:stun.l.google.com:19302"
-                ]
-            }
-        ]
-    }
+RTC_CONFIGURATION = (
+    RTCConfiguration(
+        {
+            "iceServers": [
+                {
+                    "urls": [
+                        "stun:stun.l.google.com:19302"
+                    ]
+                }
+            ]
+        }
+    )
 )
 
 
@@ -453,26 +696,40 @@ st.subheader(
     "📷 Live Camera"
 )
 
+st.info(
+    "Klik START lalu izinkan browser "
+    "mengakses kamera."
+)
+
+
 webrtc_ctx = webrtc_streamer(
 
-    key="drowsiness-detection",
+    key="drowsiness-camera",
 
     mode=WebRtcMode.SENDRECV,
 
-    rtc_configuration=RTC_CONFIGURATION,
+    rtc_configuration=(
+        RTC_CONFIGURATION
+    ),
 
     media_stream_constraints={
         "video": True,
-        "audio": False
+        "audio": False,
     },
 
     video_processor_factory=lambda:
         DrowsinessProcessor(
-            confidence_threshold,
-            drowsy_duration
+            confidence_threshold=
+                confidence_threshold,
+
+            drowsy_class=
+                drowsy_class,
+
+            drowsy_duration=
+                drowsy_duration,
         ),
 
-    async_processing=True
+    async_processing=True,
 )
 
 
@@ -480,72 +737,109 @@ webrtc_ctx = webrtc_streamer(
 # ALERT AREA
 # ============================================================
 
-alert_container = st.empty()
+alert_placeholder = st.empty()
 
-alarm_container = st.empty()
+alarm_placeholder = st.empty()
 
 
 # ============================================================
-# REAL-TIME STATUS
+# REAL-TIME INFORMATION
 # ============================================================
 
 if webrtc_ctx.state.playing:
 
-    alarm_playing = False
+    alarm_is_playing = False
 
-    while webrtc_ctx.state.playing:
+
+    while (
+        webrtc_ctx.state.playing
+    ):
 
         processor = (
             webrtc_ctx.video_processor
         )
 
+
         if processor is not None:
 
-            data = processor.get_status()
-
-            label = data["label"]
-
-            confidence = (
-                data["confidence"]
+            status = (
+                processor.get_status()
             )
 
-            duration = data["duration"]
 
-            alert = data["alert"]
+            alert = status[
+                "alert"
+            ]
+
+            label = status[
+                "label"
+            ]
+
+            confidence = status[
+                "confidence"
+            ]
+
+            duration = status[
+                "duration"
+            ]
 
 
             # ================================================
-            # UPDATE METRICS
+            # STATUS
             # ================================================
 
             if alert:
 
-                status_metric.metric(
+                status_placeholder.metric(
                     "Status",
                     "🚨 DROWSY"
                 )
 
             elif duration > 0:
 
-                status_metric.metric(
+                status_placeholder.metric(
                     "Status",
-                    "⚠️ Drowsiness detected"
+                    "⚠️ Drowsy"
                 )
 
             else:
 
-                status_metric.metric(
+                status_placeholder.metric(
                     "Status",
                     "✅ Awake"
                 )
 
 
-            confidence_metric.metric(
-                "Confidence",
-                f"{confidence:.1%}"
-            )
+            # ================================================
+            # CONFIDENCE
+            # ================================================
 
-            duration_metric.metric(
+            if (
+                confidence > 0
+            ):
+
+                confidence_placeholder.metric(
+                    "Confidence",
+                    f"{confidence:.1%}",
+                    help=(
+                        f"Detected class: "
+                        f"{label}"
+                    ),
+                )
+
+            else:
+
+                confidence_placeholder.metric(
+                    "Confidence",
+                    "-"
+                )
+
+
+            # ================================================
+            # DURATION
+            # ================================================
+
+            duration_placeholder.metric(
                 "Drowsy Duration",
                 f"{duration:.1f} s"
             )
@@ -557,38 +851,48 @@ if webrtc_ctx.state.playing:
 
             if alert:
 
-                alert_container.error(
-                    "🚨 WARNING! "
-                    "Drowsiness detected. "
-                    "Please stay alert!"
+                alert_placeholder.error(
+                    "🚨 DROWSINESS DETECTED! "
+                    "Please stay alert."
                 )
 
+
                 if (
-                    not alarm_playing
+                    not alarm_is_playing
                     and ALARM_PATH.exists()
                 ):
 
                     alarm_bytes = (
-                        ALARM_PATH.read_bytes()
+                        ALARM_PATH
+                        .read_bytes()
                     )
 
-                    alarm_container.audio(
+
+                    alarm_placeholder.audio(
                         alarm_bytes,
-                        format="audio/mp3",
-                        autoplay=True
+                        format="audio/mpeg",
+                        autoplay=True,
                     )
 
-                    alarm_playing = True
+
+                    alarm_is_playing = (
+                        True
+                    )
 
             else:
 
-                alert_container.empty()
-
-                if alarm_playing:
-
-                    alarm_container.empty()
-
-                    alarm_playing = False
+                alert_placeholder.empty()
 
 
-        time.sleep(0.25)
+                if alarm_is_playing:
+
+                    alarm_placeholder.empty()
+
+                    alarm_is_playing = (
+                        False
+                    )
+
+
+        time.sleep(
+            0.25
+        )
